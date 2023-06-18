@@ -17,7 +17,10 @@ app.register(require('@fastify/jwt'), {
 // конфигурация БД mySQL
 app.register(require('@fastify/mysql'), {
     promise: true,
-    connectionString: process.env.MYSQL_CONNECTION
+    host     : process.env.MYSQL_HOST,
+    user     : process.env.MYSQL_USER,
+    password : process.env.MYSQL_PASSWORD,
+    database : process.env.MYSQL_DATABASE,
 })
 
 app.decorate("authenticate", async function (request, reply) {

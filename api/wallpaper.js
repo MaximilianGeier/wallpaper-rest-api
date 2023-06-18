@@ -1,4 +1,5 @@
 const fs = require('fs')
+const {setLike, deleteLike, getCurrentUserID} = require('../database/databaseManager')
 
 async function routes(app, options) {
     // получение метадаты (id, количество лайков картинки и лайкнул ли пользователь ее)
@@ -342,21 +343,15 @@ async function routes(app, options) {
                 return
             }
 
-            // делаем запись в БД
-            await connection.query(
-                "insert into user_images (user_id, image_id) values (?, ?)", [userId, req.params.id]
-            ).then((result) => {
-                if(result[0].length === 0){
-                    console.log('проблемы доступа к БД')
-                    res.code(404)
+            await setLike(connection, userId, req.params.id).then(
+                (result) => {
+                    console.log(result)
+                    res.code(result.statusCode)
+                    res.send(result.message)
                 }
-                else{
-                    const insertId = result[0].insertId
-                    console.log('ответ из бд получен ', insertId)
-                    res.code(201)
-                }
-            }).catch(res.code(400))
+            )
             connection.release()
+            return
         }
     )
 
@@ -387,19 +382,6 @@ async function routes(app, options) {
                 return
             }
 
-            // удаляем
-            // await connection.query(
-            //     "DELETE from user_images where user_id=? AND image_id=?;", [userId, req.params.id]
-            // ).then((result) => {
-            //     if(result[0].affectedRows == 0){
-            //         console.log('удалено 0 строк')
-            //         res.code(400)
-            //         return
-            //     }
-            //     res.code(200).send({ message: 'успешно'})
-            // }).catch(res.code(400))
-
-
             await deleteLike(connection, userId, req.params.id)
             .then((result) => {
                 switch(result){
@@ -417,24 +399,6 @@ async function routes(app, options) {
             return
         }
     )
-
-    const deleteLike = async (connection, userId, imageId) => {
-        let deletedRowsCount = 0
-        await connection.query(
-            "DELETE from user_images where user_id=? AND image_id=?;", [userId, imageId]
-        ).then((result) => {
-            if(result[0].affectedRows == 0){
-                console.log('удалено 0 строк')
-                deletedRowsCount = 0
-                return
-            }
-            deletedRowsCount = 1
-        }).catch(deletedRowsCount = -1)
-        return deletedRowsCount
-    }
-
-
-    
 
 
     const getUsernameFromToken = (auth) => {
@@ -454,16 +418,6 @@ async function routes(app, options) {
           result = decoded.username
         })
         return result
-    }
-
-    const getCurrentUserID = async (connection, username) => {
-        let userId = null
-        const [rows, fields] = await connection.query(
-            "select id from users where username=? limit 1", [username])
-        if(rows.length != 0){
-            userId = rows[0].id
-        }
-        return userId
     }
 
     const orderByMapper = {

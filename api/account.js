@@ -1,17 +1,7 @@
 const fs = require('fs')
+const {authorizeSchema, registerSchema} = require('../schemas/schemas')
 
 async function accountRoutes(app, options) {
-    const authorizeSchema = {
-        body: {
-          type: 'object',
-          properties: {
-            username: { type: 'string', minLength: 3, maxLength: 30 },
-            passwordHash: { type: 'string', minLength: 4 }
-          },
-          required: ['username', 'passwordHash']
-        }
-      };
-
     app.post('/authorize', { schema: authorizeSchema, attachValidation: true }, async (req, res) => {
         if (req.validationError) {
             const errorMessage = errorMapper[req.validationError.validation[0].message]
@@ -39,19 +29,6 @@ async function accountRoutes(app, options) {
         }).catch(res.code(500))
         connection.release()
     });
-
-
-    const registerSchema = {
-        body: {
-          type: 'object',
-          properties: {
-            username: { type: 'string', minLength: 3, maxLength: 30 },
-            email: { type: 'string', format: 'email'},
-            passwordHash: { type: 'string', minLength: 4 }
-          },
-          required: ['username', 'email', 'passwordHash']
-        }
-      };
 
     app.post('/register', { schema: registerSchema, attachValidation: true }, async (req, res) => {
         if (req.validationError) {
