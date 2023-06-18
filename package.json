@@ -1,0 +1,25 @@
+{
+  "name": "wallpaper-rest-api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/formbody": "^7.4.0",
+    "@fastify/jwt": "^7.0.0",
+    "@fastify/multipart": "^7.6.1",
+    "@fastify/mysql": "^4.1.0",
+    "ajv": "^8.6.3",
+    "ajv-errors": "^3.0.0",
+    "dotenv": "^16.1.4",
+    "fastify": "^4.17.0",
+    "fastify-multer": "^2.0.3",
+    "mysql": "^2.18.1",
+    "mysql-migrations": "^1.0.7"
+  }
+}
