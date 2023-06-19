@@ -1,5 +1,6 @@
 const fs = require('fs')
 const {setLike, deleteLike, getCurrentUserID} = require('../database/databaseManager')
+const Vibrant = require('node-vibrant');
 
 async function routes(app, options) {
     // получение метадаты (id, количество лайков картинки и лайкнул ли пользователь ее)
@@ -57,7 +58,7 @@ async function routes(app, options) {
         }
 
         await connection.query(
-            `${likedOnlyQueryStart} select images_data.id, count(user_images.user_id) as likes, 
+            `${likedOnlyQueryStart} select images_data.id, images_data.main_color as mainColor, count(user_images.user_id) as likes, 
             IF(images_data.id in (select images_data.id from images_data LEFT JOIN user_images 
             ON images_data.id = user_images.image_id WHERE user_images.user_id=? group by images_data.id), 
             TRUE, FALSE) AS isLiked from images_data 
@@ -69,7 +70,13 @@ async function routes(app, options) {
             }
             else{
                 console.log(result)
-                res.code(200).send(result[0].map(({id, likes, isLiked}) => ({id, likes, isLiked: isLiked == 1})))
+                res.code(200).send(result[0].map(({id, likes, mainColor, isLiked}) => {
+                    let color = ''
+                    if(mainColor != null){
+                        color = mainColor
+                    }
+                    return {id, likes, mainColor: color, isLiked: isLiked == 1}
+                }))
             }
         }).catch(res.code(400))
         connection.release()
@@ -135,7 +142,7 @@ async function routes(app, options) {
             console.log(req.headers)
 
             await connection.query(
-                `${likedOnlyQueryStart} select images_data.id, count(user_images.user_id) as likes, 
+                `${likedOnlyQueryStart} select images_data.id, images_data.main_color, count(user_images.user_id) as likes, 
                 IF(images_data.id in (select images_data.id from images_data LEFT JOIN user_images 
                 ON images_data.id = user_images.image_id WHERE user_images.user_id=? group by images_data.id), 
                 TRUE, FALSE) AS isLiked from images_data 
@@ -143,7 +150,13 @@ async function routes(app, options) {
                 WHERE images_data.user_id=? ${imageType} group by images_data.id ${orderBy} ${likedOnlyQueryEnd};`, [userId, userId]
             ).then((result) => {
                 console.log("айдишник: ", userId)
-                res.code(200).send(result[0].map(({id, likes, isLiked}) => ({id, likes, isLiked: isLiked == 1})))
+                res.code(200).send(result[0].map(({id, likes, mainColor, isLiked}) => {
+                    let color = ''
+                    if(mainColor != null){
+                        color = mainColor
+                    }
+                    return {id, likes, mainColor: color, isLiked: isLiked == 1}
+                }))
             }).catch(res.code(400))
             connection.release()
         }
@@ -173,6 +186,7 @@ async function routes(app, options) {
             let generationtype = null
             let generationtypeID = null
             let hashcode = null
+            let mainColor = ''
             console.log('POST /image')
             let userId = null
             const username = getUsernameFromToken(req.headers.authorization)
@@ -235,10 +249,11 @@ async function routes(app, options) {
                 return
             }
 
+            await getMainColorFromBuffer(buffer).then((result) => mainColor = result)
 
             // делаем запись в БД
             await connection.query(
-                "insert into images_data (user_id, image_type, hashcode, creationDate) values (?, ?, ?, now());", [userId, generationtypeID, hashcode]
+                "insert into images_data (user_id, image_type, hashcode, main_color, creationDate) values (?, ?, ?, ?, now());", [userId, generationtypeID, hashcode, mainColor]
             ).then((result) => {
                 if(result[0].length === 0){
                     console.log('проблемы доступа к БД')
@@ -445,6 +460,20 @@ async function routes(app, options) {
             return ''
         }
         return ` AND images_data.image_type = (SELECT id from image_types where image_type = '${dataBaseImageType}' LIMIT 1)`
+    }
+
+    const getMainColorFromBuffer = async (buffer) => {
+        const vibrant = new Vibrant(buffer);
+        let mainColor = ''
+
+        await vibrant.getPalette((err, palette) => {
+            if (err) {
+                console.error(err);
+                return;
+            }
+            mainColor = palette.Vibrant.getHex();
+        });
+        return mainColor
     }
 }
 
