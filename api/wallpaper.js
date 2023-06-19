@@ -1,11 +1,11 @@
 const fs = require('fs')
-const {setLike, deleteLike, getCurrentUserID} = require('../database/databaseManager')
+const {setLike, deleteLike, getCurrentUserID, deleteImage} = require('../database/databaseManager')
 const Vibrant = require('node-vibrant');
 
 async function routes(app, options) {
     // получение метадаты (id, количество лайков картинки и лайкнул ли пользователь ее)
     app.post("/all", async(req, res) => {
-        console.log("GET /all")
+        console.info("POST /all")
         let orderBy = null
         let imageType = null
         let userId = null
@@ -30,13 +30,12 @@ async function routes(app, options) {
                 return
             }
         }
-        console.log("current user id:  ", userId)
-        console.log("current username:  ", username)
+        console.info("current user id:  ", userId)
+        console.info("current username:  ", username)
 
         const parts = req.parts()
         for await (const part of parts) {
           if (part.type !== 'file') {
-            console.log(part.fields)
             try{
                 orderBy = orderByMapper[part.fields.orderBy.value]
                 imageType = imageTypeMapper(part.fields.imageType.value)
@@ -65,11 +64,9 @@ async function routes(app, options) {
             LEFT JOIN user_images ON images_data.id = user_images.image_id WHERE true ${imageType} group by images_data.id ${orderBy} ${likedOnlyQueryEnd};`, [userId]
         ).then((result) => {
             if(result[0].length === 0){
-                console.log(result)
                 res.code(404)
             }
             else{
-                console.log(result)
                 res.code(200).send(result[0].map(({id, likes, mainColor, isLiked}) => {
                     let color = ''
                     if(mainColor != null){
@@ -88,7 +85,7 @@ async function routes(app, options) {
             onRequest: [app.authenticate]
         },
         async(req, res) => {
-            console.log("GET /collection")
+            console.info("GET /collection")
             let orderBy = null
             let imageType = null
             let userId = null
@@ -118,7 +115,6 @@ async function routes(app, options) {
             const parts = req.parts()
             for await (const part of parts) {
               if (part.type !== 'file') {
-                console.log(part.fields)
                 try{
                     orderBy = orderByMapper[part.fields.orderBy.value]
                     imageType = imageTypeMapper(part.fields.imageType.value)
@@ -139,8 +135,6 @@ async function routes(app, options) {
                 likedOnlyQueryEnd = ')c where isLiked = true'
             }
 
-            console.log(req.headers)
-
             await connection.query(
                 `${likedOnlyQueryStart} select images_data.id, images_data.main_color, count(user_images.user_id) as likes, 
                 IF(images_data.id in (select images_data.id from images_data LEFT JOIN user_images 
@@ -149,7 +143,6 @@ async function routes(app, options) {
                 LEFT JOIN user_images ON images_data.id = user_images.image_id 
                 WHERE images_data.user_id=? ${imageType} group by images_data.id ${orderBy} ${likedOnlyQueryEnd};`, [userId, userId]
             ).then((result) => {
-                console.log("айдишник: ", userId)
                 res.code(200).send(result[0].map(({id, likes, mainColor, isLiked}) => {
                     let color = ''
                     if(mainColor != null){
@@ -164,7 +157,7 @@ async function routes(app, options) {
 
     // получение изображения по id
     app.get("/:id", async(req, res) => {
-        console.log("GET /id", req.params.id)
+        console.info("GET /id", req.params.id)
         filePath = `./images/${req.params.id}.png`
         if (!fs.existsSync(filePath)) {
             res.code(404).send('File not found')
@@ -187,7 +180,7 @@ async function routes(app, options) {
             let generationtypeID = null
             let hashcode = null
             let mainColor = ''
-            console.log('POST /image')
+            console.info('POST /image')
             let userId = null
             const username = getUsernameFromToken(req.headers.authorization)
             if(username == null){
@@ -200,7 +193,7 @@ async function routes(app, options) {
             
 
             const buffer = await data.toBuffer()
-            console.log(buffer.byteLength)
+            console.info(buffer.byteLength)
             if(parseInt(data.fields.length.value, 10) !== buffer.byteLength){
                 res.code(300)
                 return
@@ -218,9 +211,6 @@ async function routes(app, options) {
                 return
             }
 
-            console.log('userId: ', userId)
-            
-
             generationtype = data.fields.generationType.value
             hashcode = data.fields.hashCode.value
 
@@ -234,10 +224,10 @@ async function routes(app, options) {
                 "SELECT id FROM image_types where image_type=?;", [generationtype]
             ).then((result) => {
                 if(result[0].length === 0){
-                    console.log('не правильный запрос')
+                    console.warn('не правильный запрос')
                 }
                 else{
-                    console.log('gen id: ', result[0])
+                    console.info('gen id: ', result[0])
                     generationtypeID = result[0][0].id
                 }
             }).catch(res.code(410))
@@ -256,12 +246,12 @@ async function routes(app, options) {
                 "insert into images_data (user_id, image_type, hashcode, main_color, creationDate) values (?, ?, ?, ?, now());", [userId, generationtypeID, hashcode, mainColor]
             ).then((result) => {
                 if(result[0].length === 0){
-                    console.log('проблемы доступа к БД')
+                    console.warn('проблемы доступа к БД')
                     res.code(404)
                 }
                 else{
                     insertId = result[0].insertId
-                    console.log('ответ из бд получен ', insertId)
+                    console.info('ответ из бд получен ', insertId)
                     const fileStream = fs.createWriteStream(`./images/${insertId}.png`);
                     fileStream.write(buffer);
                     fileStream.end();
@@ -273,7 +263,7 @@ async function routes(app, options) {
                 "insert into user_images (user_id, image_id) values (?, ?)", [userId, insertId]
             ).then((result) => {
                 if(result[0].length === 0){
-                    console.log('проблемы доступа к БД')
+                    console.warn('проблемы доступа к БД')
                     res.code(404)
                 }
                 else{
@@ -291,7 +281,7 @@ async function routes(app, options) {
             onRequest: [app.authenticate]
         },
         async function (req, res) {
-            console.log("DELETE /image/id=", req.params.id)
+            console.info("DELETE /image/id=", req.params.id)
             let userId = null
             const username = getUsernameFromToken(req.headers.authorization)
             if(username == null){
@@ -311,23 +301,16 @@ async function routes(app, options) {
                 return
             }
 
-            // удаляем
-            await connection.query(
-                "DELETE FROM images_data WHERE user_id=? AND id=?;", [userId, req.params.id]
-            ).then((result) => {
-                if(result[0].affectedRows == 0){
-                    console.log('удалено 0 строк')
-                    connection.release()
-                    res.code(400)
-                    return
+            // удаляем картинку из БД
+            await deleteImage(connection, userId, req.params.id).then(
+                (result) => {
+                    res.code(result.statusCode)
+                    res.send(result.message)
                 }
-                fs.unlink(`./images/${req.params.id}.png`,function(err){
-                    if(err) return console.log(err);
-                    console.log('file deleted successfully');
-                });
-                connection.release()
-                res.code(200).send({ message: 'успешно'})
-            }).catch(res.code(400))
+            ).catch(() => {
+                res.code(400)
+                res.send({ message: 'не удалось удалить' })
+            })
             connection.release()
         }
     )
@@ -360,7 +343,6 @@ async function routes(app, options) {
 
             await setLike(connection, userId, req.params.id).then(
                 (result) => {
-                    console.log(result)
                     res.code(result.statusCode)
                     res.send(result.message)
                 }
@@ -377,7 +359,7 @@ async function routes(app, options) {
             onRequest: [app.authenticate]
         },
         async function (req, res) {
-            console.log(`DELETE /id=${req.params.id}/like`)
+            console.info(`DELETE /id=${req.params.id}/like`)
             let userId = null
             const username = getUsernameFromToken(req.headers.authorization)
             if(username == null){
@@ -468,7 +450,7 @@ async function routes(app, options) {
 
         await vibrant.getPalette((err, palette) => {
             if (err) {
-                console.error(err);
+                console.warn(err);
                 return;
             }
             mainColor = palette.Vibrant.getHex();

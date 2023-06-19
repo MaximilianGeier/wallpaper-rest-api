@@ -3,6 +3,7 @@ const {authorizeSchema, registerSchema} = require('../schemas/schemas')
 
 async function accountRoutes(app, options) {
     app.post('/authorize', { schema: authorizeSchema, attachValidation: true }, async (req, res) => {
+        console.info('POST /authorize')
         if (req.validationError) {
             const errorMessage = errorMapper[req.validationError.validation[0].message]
             if(errorMessage == null){
@@ -31,6 +32,8 @@ async function accountRoutes(app, options) {
     });
 
     app.post('/register', { schema: registerSchema, attachValidation: true }, async (req, res) => {
+        console.info('POST /register')
+        let isExist = false;
         if (req.validationError) {
             const errorMessage = errorMapper[req.validationError.validation[0].message]
             if(errorMessage == null){
@@ -40,18 +43,18 @@ async function accountRoutes(app, options) {
                 res.status(400).send({ message: errorMessage})         
             }
             return
-          }
+        }
         const { username, email, passwordHash } = req.body;
         if(username == null || username === ""){
-            res.code(400).send({ message: "empty field 'username'"})
+            res.code(400).send({ message: "Пустое поле 'username'"})
             return
         }
         if(email == null || email === ""){
-            res.code(400).send({ message: "empty field 'email'"})
+            res.code(400).send({ message: "Пустое поле 'email'"})
             return
         }
         if(passwordHash == null || passwordHash === ""){
-            res.code(400).send({ message: "empty field 'password'"})
+            res.code(400).send({ message: "Пустое поле 'password'"})
             return
         }
       
@@ -61,10 +64,14 @@ async function accountRoutes(app, options) {
         ).then((result) => {
             if(result[0][0].count > 0){
                 res.status(401).send({ message: 'Пользователь с таким именем и/или почтой уже существует' });
-                connection.release()
+                isExist = true;
                 return
             }
         }).catch(res.code(500))
+        if(isExist){
+            connection.release()
+            return
+        }
         await connection.query(
             'insert into users (username, email, passwordHash) values(?, ?, ?);', [username, email, passwordHash]
         ).then((result) => {
@@ -74,7 +81,6 @@ async function accountRoutes(app, options) {
             else{
                 const token = app.jwt.sign({ "username": username })
                 res.code(200).send({ token })
-                //res.status(201).send({ message: 'User registered successfully' });
             }
         }).catch(res.code(500))
         connection.release()
