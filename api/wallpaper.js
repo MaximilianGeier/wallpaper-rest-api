@@ -419,10 +419,10 @@ async function routes(app, options) {
 
     const orderByMapper = {
         NONE: '',
-        TIME_ASCENDING: 'order by images_data.creationDate',
+        TIME_ASCENDING: 'order by images_data.creationDate asc',
         TIME: 'order by images_data.creationDate desc',
-        LIKE: 'order by likes',
-        LIKE_ASCENDING: 'order by likes desc',
+        LIKE: 'order by likes desc',
+        LIKE_ASCENDING: 'order by likes asc',
         undefined: ''
     }
 
