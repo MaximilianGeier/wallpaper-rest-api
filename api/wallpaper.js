@@ -1,5 +1,5 @@
 const fs = require('fs')
-const {setLike, deleteLike, getCurrentUserID, deleteImage} = require('../database/databaseManager')
+const {setLike, deleteLike, getCurrentUserID, deleteImage, postCollection, postGallery} = require('../database/databaseManager')
 const Vibrant = require('node-vibrant');
 
 async function routes(app, options) {
@@ -10,8 +10,6 @@ async function routes(app, options) {
         let imageType = null
         let userId = null
         let isLikedOnly = false
-        let likedOnlyQueryStart = ''
-        let likedOnlyQueryEnd = ''
         const username = getUsernameFromToken(req.headers.authorization)
 
         const connection = await app.mysql.getConnection()
@@ -37,45 +35,16 @@ async function routes(app, options) {
         for await (const part of parts) {
           if (part.type !== 'file') {
             try{
-                orderBy = orderByMapper[part.fields.orderBy.value]
-                imageType = imageTypeMapper(part.fields.imageType.value)
+                orderBy = part.fields.orderBy.value
+                imageType = part.fields.imageType.value
                 isLikedOnly = part.fields.isLikedOnly.value === 'true'
             }catch{}
           }
         }
 
-        if(orderBy == null){
-            orderBy = ''
-        }
-        if(imageType == null){
-            imageType = ''
-        }
-
-        if(isLikedOnly == true){
-            likedOnlyQueryStart = 'select * from ('
-            likedOnlyQueryEnd = ')c where isLiked = true'
-        }
-
-        await connection.query(
-            `${likedOnlyQueryStart} select images_data.id, images_data.main_color as mainColor, count(user_images.user_id) as likes, 
-            IF(images_data.id in (select images_data.id from images_data LEFT JOIN user_images 
-            ON images_data.id = user_images.image_id WHERE user_images.user_id=? group by images_data.id), 
-            TRUE, FALSE) AS isLiked from images_data 
-            LEFT JOIN user_images ON images_data.id = user_images.image_id WHERE true ${imageType} group by images_data.id ${orderBy} ${likedOnlyQueryEnd};`, [userId]
-        ).then((result) => {
-            if(result[0].length === 0){
-                res.code(404)
-            }
-            else{
-                res.code(200).send(result[0].map(({id, likes, mainColor, isLiked}) => {
-                    let color = ''
-                    if(mainColor != null){
-                        color = mainColor
-                    }
-                    return {id, likes, mainColor: color, isLiked: isLiked == 1}
-                }))
-            }
-        }).catch(res.code(400))
+        await postGallery(connection, userId, isLikedOnly, orderBy, imageType).then((result) => {
+            res.code(200).send(result)
+        }).catch(res.code(400)) 
         connection.release()
     })
 
@@ -90,8 +59,6 @@ async function routes(app, options) {
             let imageType = null
             let userId = null
             let isLikedOnly = false
-            let likedOnlyQueryStart = ''
-            let likedOnlyQueryEnd = ''
             const username = getUsernameFromToken(req.headers.authorization)
 
             const connection = await app.mysql.getConnection()
@@ -116,41 +83,17 @@ async function routes(app, options) {
             for await (const part of parts) {
               if (part.type !== 'file') {
                 try{
-                    orderBy = orderByMapper[part.fields.orderBy.value]
-                    imageType = imageTypeMapper(part.fields.imageType.value)
+                    orderBy = part.fields.orderBy.value
+                    imageType = part.fields.imageType.value
                     isLikedOnly = part.fields.isLikedOnly.value === 'true'
                 }catch{}
               }
             }
-
-            if(orderBy == null){
-                orderBy = ''
-            }
-            if(imageType == null){
-                imageType = ''
-            }
-
-            if(isLikedOnly == true){
-                likedOnlyQueryStart = 'select * from ('
-                likedOnlyQueryEnd = ')c where isLiked = true'
-            }
-
-            await connection.query(
-                `${likedOnlyQueryStart} select images_data.id, images_data.main_color, count(user_images.user_id) as likes, 
-                IF(images_data.id in (select images_data.id from images_data LEFT JOIN user_images 
-                ON images_data.id = user_images.image_id WHERE user_images.user_id=? group by images_data.id), 
-                TRUE, FALSE) AS isLiked from images_data 
-                LEFT JOIN user_images ON images_data.id = user_images.image_id 
-                WHERE images_data.user_id=? ${imageType} group by images_data.id ${orderBy} ${likedOnlyQueryEnd};`, [userId, userId]
-            ).then((result) => {
-                res.code(200).send(result[0].map(({id, likes, mainColor, isLiked}) => {
-                    let color = ''
-                    if(mainColor != null){
-                        color = mainColor
-                    }
-                    return {id, likes, mainColor: color, isLiked: isLiked == 1}
-                }))
+            
+            await postCollection(connection, userId, orderBy, imageType, isLikedOnly).then((result) => {
+                res.code(200).send(result)
             }).catch(res.code(400))
+
             connection.release()
         }
     )
@@ -415,33 +358,6 @@ async function routes(app, options) {
           result = decoded.username
         })
         return result
-    }
-
-    const orderByMapper = {
-        NONE: '',
-        TIME_ASCENDING: 'order by images_data.creationDate asc',
-        TIME: 'order by images_data.creationDate desc',
-        LIKE: 'order by likes desc',
-        LIKE_ASCENDING: 'order by likes asc',
-        undefined: ''
-    }
-
-    const imageTypeMapper = (type) => {
-        let imageTypes = {
-            ALL: '',
-            GRADIENTS: "GRADIENTS",
-            SHAPES: "SHAPES",
-            NOISE: "NOISE",
-            INTERFERENCE: "INTERFERENCE",
-            FRACTALS: "FRACTALS",
-            LANDSCAPES: "LANDSCAPES",
-        }
-
-        dataBaseImageType = imageTypes[type]
-        if(dataBaseImageType == null || dataBaseImageType == ''){
-            return ''
-        }
-        return ` AND images_data.image_type = (SELECT id from image_types where image_type = '${dataBaseImageType}' LIMIT 1)`
     }
 
     const getMainColorFromBuffer = async (buffer) => {
